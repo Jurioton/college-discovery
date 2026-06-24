@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface College {
   id: string;
@@ -16,16 +16,44 @@ interface College {
   cutoffs: { id: string; examName: string; courseName: string; closingRank: number }[];
 }
 
+interface CollegeOption {
+  id: string;
+  name: string;
+  city: string;
+}
+
 export default function ComparePage() {
-  const [ids, setIds] = useState("");
+  const [allColleges, setAllColleges] = useState<CollegeOption[]>([]);
+  const [selected, setSelected] = useState<string[]>([]);
   const [colleges, setColleges] = useState<College[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    async function fetchAll() {
+      const res = await fetch("/api/colleges?limit=50");
+      const data = await res.json();
+      if (data.success) setAllColleges(data.data.colleges);
+    }
+    fetchAll();
+  }, []);
+
+  function handleSelect(id: string) {
+    if (selected.includes(id)) {
+      setSelected(selected.filter((s) => s !== id));
+    } else if (selected.length < 3) {
+      setSelected([...selected, id]);
+    }
+  }
+
   async function handleCompare() {
+    if (selected.length < 2) {
+      setError("Please select at least 2 colleges");
+      return;
+    }
     setError("");
     setLoading(true);
-    const res = await fetch(`/api/compare?ids=${ids}`);
+    const res = await fetch(`/api/compare?ids=${selected.join(",")}`);
     const data = await res.json();
     if (!data.success) {
       setError(data.error);
@@ -38,28 +66,62 @@ export default function ComparePage() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold text-gray-800 mb-6">Compare Colleges</h1>
+      <h1 className="text-3xl font-bold text-gray-800 mb-2">Compare Colleges</h1>
+      <p className="text-gray-500 text-sm mb-6">Select 2 or 3 colleges to compare side by side</p>
 
-      {/* Input */}
-      <div className="bg-white p-4 rounded-lg shadow-sm border mb-6 flex gap-3">
-        <input
-          type="text"
-          placeholder="Enter 2-3 college IDs separated by commas..."
-          value={ids}
-          onChange={(e) => setIds(e.target.value)}
-          className="border rounded-lg px-3 py-2 text-sm flex-1"
-        />
+      {/* College Selector */}
+      <div className="bg-white p-5 rounded-lg shadow-sm border mb-6">
+        <div className="flex justify-between items-center mb-3">
+          <h2 className="font-semibold text-gray-700 text-sm">
+            Select Colleges ({selected.length}/3)
+          </h2>
+          {selected.length > 0 && (
+            <button
+              onClick={() => { setSelected([]); setColleges([]); }}
+              className="text-xs text-red-500 hover:underline"
+            >
+              Clear all
+            </button>
+          )}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+          {allColleges.map((college) => {
+            const isSelected = selected.includes(college.id);
+            const isDisabled = !isSelected && selected.length >= 3;
+            return (
+              <button
+                key={college.id}
+                onClick={() => handleSelect(college.id)}
+                disabled={isDisabled}
+                className="text-left p-3 rounded-lg border text-sm transition-colors"
+                style={{
+                  backgroundColor: isSelected ? "#EFF6FF" : "#F8FAFC",
+                  borderColor: isSelected ? "#1D4ED8" : "#E2E8F0",
+                  color: isDisabled ? "#94A3B8" : "#0F172A",
+                  cursor: isDisabled ? "not-allowed" : "pointer",
+                }}
+              >
+                <p className="font-medium">{college.name}</p>
+                <p className="text-xs text-gray-400">{college.city}</p>
+                {isSelected && (
+                  <p className="text-xs mt-1" style={{ color: "#1D4ED8" }}>✓ Selected</p>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {error && <p className="text-red-500 text-sm mt-3">{error}</p>}
+
         <button
           onClick={handleCompare}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700"
+          disabled={selected.length < 2 || loading}
+          className="mt-4 px-6 py-2 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50"
+          style={{ backgroundColor: "#1D4ED8" }}
         >
-          Compare
+          {loading ? "Comparing..." : "Compare Selected"}
         </button>
       </div>
-
-      {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
-
-      {loading && <p className="text-center text-gray-500">Loading...</p>}
 
       {/* Comparison Table */}
       {colleges.length > 0 && (
